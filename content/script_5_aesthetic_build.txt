@@ -1,0 +1,52 @@
+SCRIPT 5: "The Aesthetic Build" (30-45 seconds)
+Target: Instagram/YouTube - Cinematic maker content
+===================================================
+
+[HOOK - soft, contemplative]
+"Sometimes the best projects start with spare parts and a simple question..."
+
+[Slow pan across components]
+
+An ESP32. A tiny OLED screen. A piezo buzzer.
+
+[Show splash screen: "KRG"]
+
+What if I could make something... that feels alive?
+
+[Gentle transition to eyes opening]
+
+Big anime eyes that blink... that look around... that react.
+
+[Montage of emotions - slightly slower, more deliberate]
+
+Happiness. Curiosity. Surprise.
+
+[Show sleepy/sleeping]
+
+Even quiet moments.
+
+[Show scared with context]
+
+And when something's wrong... it shows.
+
+[Birthday mode - let it breathe]
+
+I built this for my kid.
+
+But honestly? 
+
+[Close up of eyes blinking]
+
+I think it was also a little bit for me.
+
+[OUTRO - device on desk, maybe sunset lighting]
+
+Sometimes we all need a friend that just... sits there with us.
+
+===================================================
+VISUAL NOTES:
+- Soft lighting, shallow depth of field
+- Slower transitions, let moments land
+- Lo-fi or ambient music underneath
+- End card with "Made with love" vibe
+

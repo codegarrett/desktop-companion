@@ -1,0 +1,57 @@
+DESKTOY - QUICK REFERENCE FOR VIDEO CONTENT
+============================================
+
+EMOTIONS (14 total):
+--------------------
+1.  Normal      - Neutral expression, gentle blinks
+2.  Happy       - Raised brows, curved smile
+3.  Laughing    - Squinted eyes, big open mouth
+4.  Angry       - Furrowed brows, tight frown
+5.  Sad         - Droopy brows, downturned mouth
+6.  Surprised   - Wide eyes, small pupils, O mouth
+7.  Sleepy      - Half-closed eyes, relaxed
+8.  Sleeping    - Closed eyes, ZZZs floating
+9.  Crazy       - Spiral eyes, wild grin
+10. Love        - Heart-shaped eyes, blush
+11. Wink        - One eye closed, smirk
+12. Smug        - Asymmetric smile, tilted brows
+13. Scared      - Worried brows, darting eyes, wiggling face, sweat drop
+14. Birthday    - Cake eyes, falling stars, plays Happy Birthday song
+
+SPECIAL FEATURES:
+-----------------
+• 120 FPS smooth animations
+• Procedural anime-style eyes with gradient irises
+• Dynamic pupil movement (looks around)
+• Smooth scared animation (no random jitter)
+• Falling spinning stars overlay (reusable)
+• Piezo buzzer with portamento sound effects
+• "KRG" splash screen on boot
+• Full Happy Birthday song in MIDI
+
+HARDWARE:
+---------
+• ESP32-C3 SuperMini
+• GME12864-17 OLED (SSD1306, 128x64, I2C)
+• Piezo buzzer on GPIO3
+• I2C: SDA=GPIO9, SCL=GPIO8
+
+GOOD B-ROLL MOMENTS:
+--------------------
+• Eyes blinking (smooth 120fps)
+• Pupils darting left-right when scared
+• Birthday cakes bobbing with stars falling
+• Transition between emotions
+• Splash screen "KRG" on boot
+• Close-up of the tiny ESP32-C3 chip
+• Wiring/connections (simple 4-wire I2C)
+
+SOUND BITES TO HIT:
+-------------------
+• "120 frames per second on a $2 chip"
+• "14 different emotions"
+• "Custom rendering engine"
+• "Smooth animations, no random jitter"
+• "It even sings Happy Birthday"
+• "Made for my kid, perfected for me"
+
