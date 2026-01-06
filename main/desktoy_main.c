@@ -69,6 +69,11 @@ typedef struct {
     uint32_t anim_start;     // For special animations
     float bounce;            // For laughing/dancing
     float shake;             // For crazy/scared
+    uint32_t next_crazy_look; // For crazy googly eyes timing
+    float crazy_left_look_x, crazy_left_look_y;     // Current crazy eye positions
+    float crazy_right_look_x, crazy_right_look_y;
+    float crazy_left_target_x, crazy_left_target_y;  // Target positions for smooth motion
+    float crazy_right_target_x, crazy_right_target_y;
 } face_state_t;
 
 static face_state_t face = {
@@ -329,16 +334,16 @@ static void apply_emotion_internal(emotion_t emo, bool play_sound) {
             break;
             
         case EMO_TROLLFACE:
-            // The iconic trollface: squinty eyes, raised brows, maximum smugness
-            face.target_left_eye = 0.35f;   // Squinty
-            face.target_right_eye = 0.4f;   // Slightly asymmetric
+            // The iconic trollface: squinty downturned eyes, raised brows, exaggerated troll mouth
+            face.target_left_eye = 0.3f;    // Squinty eyes
+            face.target_right_eye = 0.3f;
             face.left_brow_height = -6;     // Raised high
             face.right_brow_height = -5;
             face.left_brow_angle = -0.6f;   // Curved smugly
             face.right_brow_angle = -0.5f;
-            face.mouth_curve = 1.0f;
-            face.mouth_open = 0.8f;
-            face.mouth_width = 1.5f;
+            face.mouth_curve = 1.0f;        // Maximum smile
+            face.mouth_open = 1.0f;         // Wide open mouth
+            face.mouth_width = 2.0f;        // Extra wide
             break;
             
         default:
@@ -404,8 +409,8 @@ static void update_face(uint32_t now) {
         face.bounce = lerp(face.bounce, 0, 0.2f);
     }
     
-    // Blinking (skip during sleep or wink)
-    if (face.emotion != EMO_SLEEPING && face.emotion != EMO_WINK) {
+    // Blinking (skip during sleep, wink, or crazy)
+    if (face.emotion != EMO_SLEEPING && face.emotion != EMO_WINK && face.emotion != EMO_CRAZY) {
         if (now >= face.next_blink) {
             if (face.target_left_eye > 0.5f && face.target_right_eye > 0.5f) {
                 face.target_left_eye = 0;
@@ -426,36 +431,54 @@ static void update_face(uint32_t now) {
         face.target_look_y = ((int)(esp_random() % 9)) - 4;
         face.next_look = now + 800 + (esp_random() % 2000);
     }
+
+    // Crazy googly eyes direction changes
+    if (face.emotion == EMO_CRAZY && now >= face.next_crazy_look) {
+        face.crazy_left_look_x = ((int)(esp_random() % 12)) - 6;
+        face.crazy_left_look_y = ((int)(esp_random() % 8)) - 4;
+        face.crazy_right_look_x = ((int)(esp_random() % 12)) - 6;
+        face.crazy_right_look_y = ((int)(esp_random() % 8)) - 4;
+        face.next_crazy_look = now + 800 + (esp_random() % 1200);  // Change every 800-2000ms
+    }
     
-    // Emotion changes
+    // Emotion changes - predictable rotation for development
     if (now >= face.next_emotion) {
-        int r = esp_random() % 100;
-        emotion_t new_emo;
-        
-        if (r < 25) new_emo = EMO_NORMAL;
-        else if (r < 45) new_emo = EMO_HAPPY;
-        else if (r < 55) new_emo = EMO_LAUGHING;
-        else if (r < 62) new_emo = EMO_SURPRISED;
-        else if (r < 68) new_emo = EMO_WINK;
-        else if (r < 74) new_emo = EMO_SMUG;
-        else if (r < 79) new_emo = EMO_LOVE;
-        else if (r < 84) new_emo = EMO_SLEEPY;
-        else if (r < 88) new_emo = EMO_SLEEPING;
-        else if (r < 92) new_emo = EMO_SAD;
-        else if (r < 95) new_emo = EMO_ANGRY;
-        else if (r < 98) new_emo = EMO_SCARED;
-        else new_emo = EMO_CRAZY;
-        
+        static emotion_t emotion_sequence[] = {
+            EMO_NORMAL, EMO_HAPPY, EMO_LAUGHING, EMO_SURPRISED, EMO_WINK,
+            EMO_SMUG, EMO_LOVE, EMO_SLEEPY, EMO_SLEEPING, EMO_SAD,
+            EMO_ANGRY, EMO_SCARED, EMO_CRAZY, EMO_BIRTHDAY, EMO_TROLLFACE
+        };
+        static int current_emotion_index = 0;
+
+        emotion_t new_emo = emotion_sequence[current_emotion_index];
+        current_emotion_index = (current_emotion_index + 1) % (sizeof(emotion_sequence) / sizeof(emotion_sequence[0]));
+
         apply_emotion(new_emo);
-        
+
         int duration = 3000 + (esp_random() % 5000);
         if (new_emo == EMO_SLEEPING) duration = 5000 + (esp_random() % 3000);
-        if (new_emo == EMO_CRAZY) duration = 1500 + (esp_random() % 1500);
-        
+        if (new_emo == EMO_CRAZY) duration = 4000 + (esp_random() % 4000);  // Longer crazy duration
+        if (new_emo == EMO_BIRTHDAY) duration = 8000;  // Longer duration for birthday song
+
         face.next_emotion = now + duration;
         face.anim_start = now;
-        
-        ESP_LOGI(TAG, "Emotion: %d", new_emo);
+
+        ESP_LOGI(TAG, "Emotion: %d (%s)", new_emo,
+                 new_emo == EMO_NORMAL ? "NORMAL" :
+                 new_emo == EMO_HAPPY ? "HAPPY" :
+                 new_emo == EMO_LAUGHING ? "LAUGHING" :
+                 new_emo == EMO_SURPRISED ? "SURPRISED" :
+                 new_emo == EMO_WINK ? "WINK" :
+                 new_emo == EMO_SMUG ? "SMUG" :
+                 new_emo == EMO_LOVE ? "LOVE" :
+                 new_emo == EMO_SLEEPY ? "SLEEPY" :
+                 new_emo == EMO_SLEEPING ? "SLEEPING" :
+                 new_emo == EMO_SAD ? "SAD" :
+                 new_emo == EMO_ANGRY ? "ANGRY" :
+                 new_emo == EMO_SCARED ? "SCARED" :
+                 new_emo == EMO_CRAZY ? "CRAZY" :
+                 new_emo == EMO_BIRTHDAY ? "BIRTHDAY" :
+                 new_emo == EMO_TROLLFACE ? "TROLLFACE" : "UNKNOWN");
     }
 }
 
@@ -475,7 +498,6 @@ typedef struct {
 } anime_eye_t;
 
 static anime_eye_t left_eye, right_eye;
-static float cake_rotation = 0.0f;
 
 // Note: 3D mouth mesh code removed - using 2D drawing for reliability
 // The 3D rendering infrastructure remains available for future experiments
@@ -519,7 +541,7 @@ static void init_3d_scene(void) {
 // 2D DRAWING HELPERS (for eyes, eyebrows, effects)
 // ============================================================================
 
-// Draw a heart shape for love eyes
+// Draw a heart outline for love eyes (beating animation)
 static void draw_heart_2d(int cx, int cy, int base_size) {
     uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
     float beat_phase = (float)(now % 600) / 600.0f;
@@ -532,124 +554,23 @@ static void draw_heart_2d(int cx, int cy, int base_size) {
         beat = 0;
     }
     float size = base_size + beat * 3.0f;
-    
-    float highlight_x = -0.3f - beat * 0.1f;
-    float highlight_y = -0.4f - beat * 0.1f;
-    
-    int isize = (int)size + 2;
-    for (int py = -isize; py <= isize; py++) {
-        for (int px = -isize; px <= isize; px++) {
-            float nx = (float)px / size;
-            float ny = -(float)py / size;
-            
-            float x2 = nx * nx;
-            float y2 = ny * ny;
-            float y3 = ny * ny * ny;
-            float inner = x2 + y2 - 1.0f;
-            float heart_val = inner * inner * inner - x2 * y3;
-            
-            if (heart_val < 0) {
-                float dx = nx - highlight_x;
-                float dy = ny - highlight_y;
-                float highlight_dist = sqrtf(dx*dx + dy*dy);
-                float shade = highlight_dist * 1.2f;
-                float edge_dist = -heart_val;
-                if (edge_dist < 0.1f) shade += 0.3f;
-                
-                bool pixel_on;
-                if (shade < 0.3f) pixel_on = true;
-                else if (shade < 0.5f) pixel_on = ((px + py) % 2 == 0);
-                else if (shade < 0.7f) pixel_on = ((px + py) % 3 == 0);
-                else if (shade < 0.9f) pixel_on = ((px % 2 == 0) && (py % 2 == 0));
-                else pixel_on = false;
-                
-                ssd1306_set_pixel(cx + px, cy + py, pixel_on);
-            }
-        }
-    }
-    
+
+    // Draw heart outline using parametric equation (thicker/darker)
     for (float t = 0; t < 6.28f; t += 0.06f) {
         float x = 16.0f * sinf(t) * sinf(t) * sinf(t);
         float y = 13.0f * cosf(t) - 5.0f * cosf(2*t) - 2.0f * cosf(3*t) - cosf(4*t);
         int px = cx + (int)(x * size / 16.0f);
         int py = cy - (int)(y * size / 17.0f);
+
+        // Draw thicker outline by setting multiple pixels around each point
         ssd1306_set_pixel(px, py, false);
+        ssd1306_set_pixel(px + 1, py, false);
+        ssd1306_set_pixel(px, py + 1, false);
+        ssd1306_set_pixel(px - 1, py, false);
+        ssd1306_set_pixel(px, py - 1, false);
     }
 }
 
-// Draw spiral for crazy eyes
-static void draw_spiral_2d(int cx, int cy, int size) {
-    for (float a = 0; a < 12; a += 0.3f) {
-        float r = a * size / 12.0f;
-        int x = cx + (int)(cosf(a) * r);
-        int y = cy + (int)(sinf(a) * r);
-        ssd1306_set_pixel(x, y, false);
-        ssd1306_set_pixel(x+1, y, false);
-    }
-}
-
-// Draw cake for birthday eyes
-static void draw_cake_3d_style(int cx, int cy, int size) {
-    int w = size;
-    int h = size + 2;
-    int top_y = cy - h/3;
-    int bot_y = cy + h*2/3;
-    
-    int curve_h = size / 3;
-    for (int x = -w; x <= w; x++) {
-        float t = (float)x / w;
-        int curve = (int)(curve_h * sqrtf(fmaxf(0, 1 - t*t)));
-        for (int y = top_y - curve; y <= top_y; y++) {
-            ssd1306_set_pixel(cx + x, y, false);
-        }
-    }
-    
-    for (int y = top_y; y <= bot_y; y++) {
-        for (int x = -w; x <= w; x++) {
-            ssd1306_set_pixel(cx + x, y, false);
-        }
-    }
-    
-    int drips[][2] = {{-w+1, 5}, {-w/2, 7}, {-2, 4}, {3, 6}, {w-1, 5}};
-    for (int i = 0; i < 5; i++) {
-        int dx = drips[i][0];
-        int dlen = drips[i][1] * size / 14;
-        for (int dy = 0; dy < dlen; dy++) {
-            int drip_w = (dy < dlen * 2/3) ? 1 : 0;
-            for (int ddx = -drip_w; ddx <= drip_w; ddx++) {
-                ssd1306_set_pixel(cx + dx + ddx, top_y + dy, true);
-            }
-        }
-        ssd1306_set_pixel(cx + dx, top_y + dlen, true);
-    }
-    
-    int line_y1 = cy + 1;
-    int line_y2 = cy + 5;
-    for (int x = -w + 1; x <= w - 1; x++) {
-        ssd1306_set_pixel(cx + x, line_y1, true);
-        ssd1306_set_pixel(cx + x, line_y2, true);
-    }
-    
-    int candle_w = 1;
-    int candle_h = size / 2 + 1;
-    int candle_base = top_y - curve_h;
-    for (int y = 0; y < candle_h; y++) {
-        for (int x = -candle_w; x <= candle_w; x++) {
-            ssd1306_set_pixel(cx + x, candle_base - y, false);
-        }
-    }
-    
-    int flame_base = candle_base - candle_h;
-    int flame_h = size / 3 + 2;
-    for (int y = 0; y < flame_h; y++) {
-        float t = (float)y / flame_h;
-        int fw = (int)((1 - t) * (candle_w + 2));
-        for (int x = -fw; x <= fw; x++) {
-            ssd1306_set_pixel(cx + x, flame_base - y, false);
-        }
-    }
-    ssd1306_set_pixel(cx, flame_base - flame_h, false);
-}
 
 // Draw anime-style eye
 static void draw_anime_eye_2d(int cx, int cy, int look_x, int look_y, float openness, 
@@ -659,7 +580,7 @@ static void draw_anime_eye_2d(int cx, int cy, int look_x, int look_y, float open
     int half_w = eye_w / 2;
     int half_h = eye_h / 2;
     
-    if (face.shake > 0) {
+    if (face.shake > 0 && face.emotion != EMO_CRAZY) {
         cx += (int)(face.shake * ((esp_random() % 5) - 2));
     }
     
@@ -668,15 +589,8 @@ static void draw_anime_eye_2d(int cx, int cy, int look_x, int look_y, float open
         return;
     }
     
-    if (emo == EMO_CRAZY && openness > 0.3f) {
-        draw_spiral_2d(cx, cy, 10);
-        return;
-    }
+    // Crazy eyes use normal eyes but with bloodshot effect
     
-    if (emo == EMO_BIRTHDAY && openness > 0.3f) {
-        draw_cake_3d_style(cx, cy, 10);
-        return;
-    }
     
     if (openness < 0.2f) {
         for (int x = -half_w; x <= half_w; x++) {
@@ -689,22 +603,22 @@ static void draw_anime_eye_2d(int cx, int cy, int look_x, int look_y, float open
         return;
     }
     
-    // Trollface gets special squinty curved eyes (the iconic look)
-    if (emo == EMO_TROLLFACE && openness < 0.5f) {
-        // Draw the curved squinty eye - curves upward with a smug look
+    // Trollface gets special squinty downturned eyes (opposite of the smile)
+    if (emo == EMO_TROLLFACE && openness < 0.8f) {
+        // Draw the downturned squinty eye - curves downward opposite to the crooked smile
         for (int x = -half_w; x <= half_w; x++) {
             float t = (float)x / (float)half_w;
-            // Asymmetric curve - one side higher for smugness
-            float asym = is_left ? 0.3f : -0.3f;
-            int y = (int)((t * t * 6) + (t * asym * 3));
-            // Thick curved line
+            // Downturned curve - opposite of the upward smile
+            float downturn = is_left ? -0.4f : 0.4f;  // Asymmetric downturn
+            int y = (int)((t * t * 8) + (t * downturn * 4));  // More curved and downturned
+            // Thick downturned line
             ssd1306_set_pixel(cx + x, cy + y - 1, false);
             ssd1306_set_pixel(cx + x, cy + y, false);
             ssd1306_set_pixel(cx + x, cy + y + 1, false);
             ssd1306_set_pixel(cx + x, cy + y + 2, false);
         }
-        // Add a small highlight dot for that knowing look
-        ssd1306_set_pixel(cx + (is_left ? -5 : 5), cy - 3, false);
+        // Add a small knowing highlight
+        ssd1306_set_pixel(cx + (is_left ? -4 : 4), cy + 2, false);
         return;
     }
     
@@ -762,6 +676,7 @@ static void draw_anime_eye_2d(int cx, int cy, int look_x, int look_y, float open
         }
     }
     
+    // Draw pupil (normal for all emotions)
     int pupil_w = (emo == EMO_SURPRISED) ? 2 : 4;
     int pupil_h = (emo == EMO_SURPRISED) ? 3 : 6;
     for (int dy = -pupil_h; dy <= pupil_h; dy++) {
@@ -773,7 +688,7 @@ static void draw_anime_eye_2d(int cx, int cy, int look_x, int look_y, float open
             }
         }
     }
-    
+
     int hl_x = iris_cx - 5;
     int hl_y = iris_cy - 4;
     for (int dy = -2; dy <= 2; dy++) {
@@ -1119,55 +1034,65 @@ static void draw_mouth_2d(int cx, int cy, emotion_t emo) {
         }
         
         case EMO_TROLLFACE: {
-            // THE TROLLFACE GRIN - wide, smug, showing all teeth
+            // THE TROLLFACE GRIN - extra wide, maximum smile, realistic teeth
             // This is the iconic "problem?" expression
-            int width = 20;  // Extra wide
-            
-            // The grin curves up dramatically at the corners
-            // Top lip - slight upward curve
+            int width = 24;  // Even wider for exaggerated smile
+
+            // The grin curves up dramatically at the corners - more exaggerated
+            // Top lip - more pronounced upward curve
             for (int x = -width; x <= width; x++) {
                 float t = (float)x / (float)width;
-                // Asymmetric smug curve - right side higher
-                int y = (int)(-3 * (1.0f - t * t) + t * 2);
+                // More asymmetric and exaggerated smug curve
+                int y = (int)(-4 * (1.0f - t * t) + t * 3);
+                ssd1306_set_pixel(cx + x, cy + y - 4, false);
                 ssd1306_set_pixel(cx + x, cy + y - 3, false);
                 ssd1306_set_pixel(cx + x, cy + y - 2, false);
                 ssd1306_set_pixel(cx + x, cy + y - 1, false);
             }
-            
-            // Bottom lip - dramatic grin curve, higher at the sides
+
+            // Bottom lip - even more dramatic grin curve, higher at the sides
             for (int x = -width; x <= width; x++) {
                 float t = (float)x / (float)width;
                 float abs_t = fabsf(t);
-                // Create the iconic trollface grin shape - curves UP at corners
-                int y = (int)(5 * (1.0f - t * t) - abs_t * abs_t * 3);
-                ssd1306_set_pixel(cx + x, cy + y + 4, false);
+                // More exaggerated trollface grin shape
+                int y = (int)(8 * (1.0f - t * t) - abs_t * abs_t * 5);
                 ssd1306_set_pixel(cx + x, cy + y + 5, false);
                 ssd1306_set_pixel(cx + x, cy + y + 6, false);
+                ssd1306_set_pixel(cx + x, cy + y + 7, false);
+                ssd1306_set_pixel(cx + x, cy + y + 8, false);
             }
-            
-            // Lots of teeth for maximum smugness
-            int teeth_top = cy - 1;
-            int teeth_bot = cy + 6;
-            int num_teeth = 12;
-            int tooth_width = (width * 2 - 4) / num_teeth;
-            
+
+            // Realistic teeth - individual tooth shapes
+            int teeth_top = cy - 2;
+            int teeth_bottom = cy + 8;
+            int num_teeth = 10;  // Slightly fewer for more defined teeth
+            int tooth_width = (width * 2 - 6) / num_teeth;
+
             for (int t = 0; t < num_teeth; t++) {
-                int tx = cx - width + 2 + t * tooth_width + tooth_width / 2;
-                // Draw each tooth as a white rectangle
-                for (int ty = teeth_top; ty < teeth_bot - 1; ty++) {
-                    ssd1306_set_pixel(tx, ty, true);
-                    ssd1306_set_pixel(tx + 1, ty, true);
+                int tx = cx - width + 3 + t * tooth_width + tooth_width / 2;
+                // Draw each tooth with more realistic shape (white with dark outline)
+                for (int ty = teeth_top; ty < teeth_bottom; ty++) {
+                    // Tooth shape varies by position for realism
+                    int tooth_height = teeth_bottom - ty;
+                    int left_edge = tx - (tooth_height / 3);
+                    int right_edge = tx + (tooth_height / 3) + 1;
+
+                    // Fill tooth with white
+                    if (tx >= left_edge && tx <= right_edge && ty >= teeth_top && ty < teeth_bottom) {
+                        ssd1306_set_pixel(tx, ty, true);
+                        ssd1306_set_pixel(tx + 1, ty, true);
+                    }
                 }
-                // Tooth separator (dark line)
-                for (int ty = teeth_top; ty < teeth_bot; ty++) {
-                    ssd1306_set_pixel(tx + tooth_width - 1, ty, false);
+                // Dark separator between teeth
+                for (int ty = teeth_top; ty < teeth_bottom; ty++) {
+                    ssd1306_set_pixel(tx + tooth_width / 2 + 1, ty, false);
                 }
             }
-            
-            // Dark gaps at very corners of mouth (the iconic trollface look)
-            for (int i = 0; i < 3; i++) {
-                ssd1306_set_pixel(cx - width + i, cy - 2 + i, false);
-                ssd1306_set_pixel(cx + width - i, cy - 3 + i, false);
+
+            // Dark gaps at corners of mouth (the iconic trollface look)
+            for (int i = 0; i < 4; i++) {
+                ssd1306_set_pixel(cx - width + i, cy - 3 + i, false);
+                ssd1306_set_pixel(cx + width - i, cy - 4 + i, false);
             }
             break;
         }
@@ -1187,6 +1112,7 @@ static void draw_mouth_2d(int cx, int cy, emotion_t emo) {
 // ============================================================================
 
 #define MAX_STARS 8
+#define MAX_FLOATING_HEARTS 10
 
 typedef struct {
     float x, y;
@@ -1197,9 +1123,20 @@ typedef struct {
     bool active;
 } falling_star_t;
 
+typedef struct {
+    float x, y;
+    float speed;
+    float wobble;
+    int size;
+    bool active;
+} floating_heart_t;
+
 static falling_star_t stars[MAX_STARS];
+static floating_heart_t hearts[MAX_FLOATING_HEARTS];
 static bool stars_initialized = false;
+static bool hearts_initialized = false;
 static bool stars_enabled = false;
+static bool hearts_enabled = false;
 
 static void init_falling_stars(void) {
     for (int i = 0; i < MAX_STARS; i++) {
@@ -1262,15 +1199,214 @@ static void set_falling_stars_enabled(bool enabled) {
 
 static void draw_falling_stars_overlay(void) {
     if (!stars_enabled) return;
-    
+
     update_falling_stars();
-    
+
     for (int i = 0; i < MAX_STARS; i++) {
         if (!stars[i].active) continue;
         if (stars[i].y < 0 || stars[i].y >= SCREEN_HEIGHT) continue;
-        
-        draw_spinning_star((int)stars[i].x, (int)stars[i].y, 
+
+        draw_spinning_star((int)stars[i].x, (int)stars[i].y,
                           stars[i].size, stars[i].rotation);
+    }
+}
+
+// ============================================================================
+// FLOATING HEARTS OVERLAY (for love emotion)
+// ============================================================================
+
+static void init_floating_hearts(void) {
+    for (int i = 0; i < MAX_FLOATING_HEARTS; i++) {
+        hearts[i].x = esp_random() % SCREEN_WIDTH;
+        hearts[i].y = SCREEN_HEIGHT + (int)(esp_random() % 20);
+        hearts[i].speed = 1.0f + (esp_random() % 100) / 100.0f;  // Faster: 1.0 to 2.0
+        hearts[i].wobble = (esp_random() % 628) / 100.0f;  // Random phase
+        hearts[i].size = 14 + (esp_random() % 7);  // Bigger: Size 14-20
+        hearts[i].active = true;
+    }
+    hearts_initialized = true;
+}
+
+static void update_floating_hearts(void) {
+    if (!hearts_initialized) init_floating_hearts();
+
+    for (int i = 0; i < MAX_FLOATING_HEARTS; i++) {
+        if (!hearts[i].active) continue;
+
+        hearts[i].y -= hearts[i].speed;
+        hearts[i].x += sinf(hearts[i].wobble) * 0.3f;
+        hearts[i].wobble += 0.1f;
+
+        // Reset heart when it goes off screen
+        if (hearts[i].y < -10) {
+            hearts[i].x = esp_random() % SCREEN_WIDTH;
+            hearts[i].y = SCREEN_HEIGHT + (int)(esp_random() % 20);
+            hearts[i].speed = 1.0f + (esp_random() % 100) / 100.0f;
+            hearts[i].wobble = (esp_random() % 628) / 100.0f;
+            hearts[i].size = 14 + (esp_random() % 7);
+        }
+    }
+}
+
+static void draw_floating_heart(int cx, int cy, int size) {
+    // Draw a floating heart outline using parametric equation
+    float scale = size / 6.0f;  // Scale based on desired size (size 14-20)
+    for (float t = 0; t < 6.28f; t += 0.15f) {  // Fewer points for smaller hearts
+        float x = 16.0f * sinf(t) * sinf(t) * sinf(t);
+        float y = 13.0f * cosf(t) - 5.0f * cosf(2*t) - 2.0f * cosf(3*t) - cosf(4*t);
+        int px = cx + (int)(x * scale / 16.0f);
+        int py = cy - (int)(y * scale / 17.0f);
+
+        // Draw single pixel for tiny hearts
+        if (px >= 0 && px < SCREEN_WIDTH && py >= 0 && py < SCREEN_HEIGHT) {
+            ssd1306_set_pixel(px, py, false);
+        }
+    }
+}
+
+static void set_floating_hearts_enabled(bool enabled) {
+    hearts_enabled = enabled;
+    if (enabled && !hearts_initialized) {
+        init_floating_hearts();
+    }
+}
+
+static void draw_floating_hearts_overlay(void) {
+    if (!hearts_enabled) return;
+
+    update_floating_hearts();
+
+    for (int i = 0; i < MAX_FLOATING_HEARTS; i++) {
+        if (!hearts[i].active) continue;
+        if (hearts[i].y < -5 || hearts[i].y >= SCREEN_HEIGHT + 5) continue;
+
+        draw_floating_heart((int)hearts[i].x, (int)hearts[i].y, hearts[i].size);
+    }
+}
+
+// ============================================================================
+// BIRTHDAY CAKE AND TEXT
+// ============================================================================
+
+static void draw_birthday_cake(void) {
+    // Draw a simple cake outline in the center
+    int cake_center_x = SCREEN_WIDTH / 2;
+    int cake_center_y = SCREEN_HEIGHT / 2 - 10;
+
+    // Cake base (rectangle)
+    int cake_width = 40;
+    int cake_height = 20;
+    int cake_left = cake_center_x - cake_width / 2;
+    int cake_top = cake_center_y - cake_height / 2;
+    int cake_bottom = cake_top + cake_height;
+
+    // Draw cake outline
+    for (int x = cake_left; x <= cake_left + cake_width; x++) {
+        ssd1306_set_pixel(x, cake_top, false);        // Top
+        ssd1306_set_pixel(x, cake_bottom, false);     // Bottom
+    }
+    for (int y = cake_top; y <= cake_bottom; y++) {
+        ssd1306_set_pixel(cake_left, y, false);       // Left
+        ssd1306_set_pixel(cake_left + cake_width, y, false); // Right
+    }
+
+    // Cake top layer (smaller rectangle on top)
+    int top_width = 35;
+    int top_height = 8;
+    int top_left = cake_center_x - top_width / 2;
+    int top_top = cake_top - top_height;
+
+    for (int x = top_left; x <= top_left + top_width; x++) {
+        ssd1306_set_pixel(x, top_top, false);         // Top
+    }
+    for (int y = top_top; y <= cake_top; y++) {
+        ssd1306_set_pixel(top_left, y, false);        // Left
+        ssd1306_set_pixel(top_left + top_width, y, false); // Right
+    }
+
+    // Simple candle in the center
+    int candle_x = cake_center_x;
+    int candle_top = top_top - 8;
+    for (int y = candle_top; y <= top_top; y++) {
+        ssd1306_set_pixel(candle_x, y, false);        // Candle stick
+    }
+    // Candle flame (small triangle)
+    ssd1306_set_pixel(candle_x, candle_top, false);
+    ssd1306_set_pixel(candle_x - 1, candle_top + 1, false);
+    ssd1306_set_pixel(candle_x + 1, candle_top + 1, false);
+}
+
+static void draw_birthday_text(void) {
+    // Draw "HAPPY BIRTHDAY" at the bottom in large text (~12px tall)
+    const char* text = "HAPPY BIRTHDAY";
+    int text_len = strlen(text);
+    int char_width = 8;  // Approximate width per character
+    int total_width = text_len * char_width;
+    int start_x = (SCREEN_WIDTH - total_width) / 2;
+    int start_y = SCREEN_HEIGHT - 15;  // Near bottom with some margin
+
+    // Simple large text rendering (each character is 8x12 pixels)
+    for (int i = 0; i < text_len; i++) {
+        int char_x = start_x + i * char_width;
+        char c = text[i];
+
+        // Draw each character as a simple 8x12 bitmap
+        // Using basic ASCII character patterns
+        for (int dy = 0; dy < 12; dy++) {
+            for (int dx = 0; dx < 8; dx++) {
+                int pixel_x = char_x + dx;
+                int pixel_y = start_y + dy;
+
+                if (pixel_x >= 0 && pixel_x < SCREEN_WIDTH &&
+                    pixel_y >= 0 && pixel_y < SCREEN_HEIGHT) {
+
+                    // Simple character patterns (very basic)
+                    bool draw_pixel = false;
+
+                    switch (c) {
+                        case 'H':
+                            if ((dx == 0 || dx == 7) || (dy == 6 && dx >= 1 && dx <= 6)) draw_pixel = true;
+                            break;
+                        case 'A':
+                            if ((dx == 0 || dx == 7) && dy > 2) draw_pixel = true;
+                            else if (dy == 0 || dy == 6) draw_pixel = true;
+                            break;
+                        case 'P':
+                            if (dx == 0 || (dx == 7 && dy <= 6) || ((dy == 0 || dy == 6) && dx <= 6)) draw_pixel = true;
+                            break;
+                        case 'Y':
+                            if ((dx == dy/2 || dx == 7 - dy/2) && dy <= 6) draw_pixel = true;
+                            else if (dy > 6 && dx == 3) draw_pixel = true;
+                            break;
+                        case 'B':
+                            if (dx == 0 || (dx == 6 && dy != 0 && dy != 6 && dy != 12) ||
+                                ((dy == 0 || dy == 6 || dy == 11) && dx <= 6)) draw_pixel = true;
+                            break;
+                        case 'I':
+                            if (dx == 3 || dy == 0 || dy == 11) draw_pixel = true;
+                            break;
+                        case 'R':
+                            if (dx == 0 || (dx == 6 && dy <= 6) || dy == 0 || dy == 6) draw_pixel = true;
+                            else if (dy > 6 && dx == dy - 6) draw_pixel = true;
+                            break;
+                        case 'T':
+                            if (dy == 0 || dx == 3) draw_pixel = true;
+                            break;
+                        case 'D':
+                            if (dx == 0 || (dx == 6 && dy > 0 && dy < 11) ||
+                                ((dy == 0 || dy == 11) && dx <= 6)) draw_pixel = true;
+                            break;
+                        case ' ':
+                            draw_pixel = false;
+                            break;
+                    }
+
+                    if (draw_pixel) {
+                        ssd1306_set_pixel(pixel_x, pixel_y, false);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1342,16 +1478,39 @@ static void draw_3d_face(void) {
     float right_openness = face.right_eye_open;
     int look_x = left_eye.look_x + scared_look_x;
     int look_y = left_eye.look_y;
-    
-    if (face.emotion == EMO_BIRTHDAY && left_openness > 0.3f) {
-        cake_rotation += 0.15f;
-        int bob = (int)(sinf(cake_rotation) * 2);
-        draw_cake_3d_style(left_eye_x, left_eye.y + bob, 12);
-        draw_cake_3d_style(right_eye_x, right_eye.y - bob, 12);
-    } else {
-        draw_anime_eye_2d(left_eye_x, left_eye.y, look_x, look_y, 
+
+    if (face.emotion == EMO_CRAZY) {
+        // Crazy rolling eyes - smooth animated motion between random positions
+        uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
+
+        // Update target positions every 400-600ms for smooth rolling effect
+        if (now >= face.next_crazy_look) {
+            face.crazy_left_target_x = ((int)(esp_random() % 14)) - 7;
+            face.crazy_left_target_y = ((int)(esp_random() % 10)) - 5;
+            face.crazy_right_target_x = ((int)(esp_random() % 14)) - 7;
+            face.crazy_right_target_y = ((int)(esp_random() % 10)) - 5;
+            face.next_crazy_look = now + 400 + (esp_random() % 200);
+        }
+
+        // Smoothly interpolate current positions toward targets
+        face.crazy_left_look_x = lerp(face.crazy_left_look_x, face.crazy_left_target_x, 0.08f);
+        face.crazy_left_look_y = lerp(face.crazy_left_look_y, face.crazy_left_target_y, 0.08f);
+        face.crazy_right_look_x = lerp(face.crazy_right_look_x, face.crazy_right_target_x, 0.08f);
+        face.crazy_right_look_y = lerp(face.crazy_right_look_y, face.crazy_right_target_y, 0.08f);
+
+        int crazy_left_lx = look_x + (int)face.crazy_left_look_x;
+        int crazy_left_ly = look_y + (int)face.crazy_left_look_y;
+        int crazy_right_lx = look_x + (int)face.crazy_right_look_x;
+        int crazy_right_ly = look_y + (int)face.crazy_right_look_y;
+
+        draw_anime_eye_2d(left_eye_x, left_eye.y, crazy_left_lx, crazy_left_ly,
                           left_openness, true, face.emotion);
-        draw_anime_eye_2d(right_eye_x, right_eye.y, look_x, look_y, 
+        draw_anime_eye_2d(right_eye_x, right_eye.y, crazy_right_lx, crazy_right_ly,
+                          right_openness, false, face.emotion);
+    } else {
+        draw_anime_eye_2d(left_eye_x, left_eye.y, look_x, look_y,
+                          left_openness, true, face.emotion);
+        draw_anime_eye_2d(right_eye_x, right_eye.y, look_x, look_y,
                           right_openness, false, face.emotion);
     }
     
@@ -1399,9 +1558,23 @@ static void draw_3d_face(void) {
     } else {
         set_falling_stars_enabled(false);
     }
+
+    // Floating hearts for love
+    if (face.emotion == EMO_LOVE) {
+        set_floating_hearts_enabled(true);
+    } else {
+        set_floating_hearts_enabled(false);
+    }
     
     draw_falling_stars_overlay();
-    
+    draw_floating_hearts_overlay();
+
+    // Birthday cake and text
+    if (face.emotion == EMO_BIRTHDAY) {
+        draw_birthday_cake();
+        draw_birthday_text();
+    }
+
     ssd1306_update();
 }
 
@@ -1438,29 +1611,24 @@ void app_main(void)
     ESP_LOGI(TAG, "3D renderer initialized");
     ESP_LOGI(TAG, "Free heap: %lu bytes", (unsigned long)esp_get_free_heap_size());
     
-    #define BIRTHDAY_SONG_DURATION_MS 11000
-    
     // Initialize face timers
     uint32_t start = xTaskGetTickCount() * portTICK_PERIOD_MS;
     face.next_blink = start + 3000;
     face.next_look = start + 2000;
-    face.next_emotion = start + BIRTHDAY_SONG_DURATION_MS;
-    
-    // Start with Birthday emotion
-    face.emotion = EMO_BIRTHDAY;
-    face.left_brow_height = -4;
-    face.right_brow_height = -4;
-    face.left_brow_angle = -0.4f;
-    face.right_brow_angle = -0.4f;
-    face.target_left_eye = 0.4f;
-    face.target_right_eye = 0.4f;
-    face.left_eye_open = 0.4f;
-    face.right_eye_open = 0.4f;
-    face.mouth_curve = 1.0f;
-    face.mouth_open = 0.7f;
-    last_sound_emotion = EMO_BIRTHDAY;
-    buzzer_play_sfx(SFX_BIRTHDAY);
-    ESP_LOGI(TAG, "Playing Happy Birthday! Duration: %d ms", BIRTHDAY_SONG_DURATION_MS);
+    face.next_emotion = start + 3000;  // Start emotion changes after 3 seconds
+    face.next_crazy_look = start + 1000;  // Start crazy eye changes after 1 second
+    face.crazy_left_look_x = 0;
+    face.crazy_left_look_y = 0;
+    face.crazy_right_look_x = 0;
+    face.crazy_right_look_y = 0;
+    face.crazy_left_target_x = 0;
+    face.crazy_left_target_y = 0;
+    face.crazy_right_target_x = 0;
+    face.crazy_right_target_y = 0;
+
+    // Start with trollface emotion for testing
+    apply_emotion(EMO_TROLLFACE);
+    ESP_LOGI(TAG, "Starting with trollface emotion");
     
     ESP_LOGI(TAG, "Starting animation...");
     
