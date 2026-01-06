@@ -80,3 +80,6 @@ Desktop.ini
 
 # IDE settings (contains user-specific paths)
 .vscode/
+
+# Content folder (scripts and assets)
+content/
